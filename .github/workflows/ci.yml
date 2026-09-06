@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra dev
+      - run: uv run ruff check src/ tests/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra dev
+      # Le corpus est nécessaire : les tests vérifient que chaque citation de
+      # référence du jeu annoté existe verbatim dans les documents.
+      - run: ./scripts/fetch_corpus.sh
+      - run: uv run pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t rpib:ci .
+      # On ne se contente pas de construire : on vérifie que l'image n'embarque
+      # pas l'outillage de développement et ne tourne pas en root.
+      - name: L'image est minimale et non privilégiée
+        run: |
+          test "$(docker run --rm --entrypoint id rpib:ci -un)" = "rpib"
+          ! docker run --rm --entrypoint sh rpib:ci -c "command -v pytest" || exit 1
+          ! docker run --rm --entrypoint sh rpib:ci -c "command -v uv" || exit 1
+      - name: La ligne de commande répond
+        run: docker run --rm rpib:ci --help
