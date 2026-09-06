@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Modèles et caches lourds
+.cache/
+models/
+chroma_db/
+
+# Corpus récupéré par script (reproductible via scripts/fetch_corpus.sh)
+corpus/clean/
+corpus/poisoned/
+
+# Résultats bruts d'exécution (les rapports agrégés sont versionnés)
+results/runs/
+
+# Environnement
+.env
+
+# Plan de travail personnel
+PLAN.md

@@ -1,0 +1,50 @@
+[project]
+name = "rpib"
+version = "0.1.0"
+description = "Banc d'essai d'injection de prompt sur une application RAG"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "chromadb>=0.5",
+    "sentence-transformers>=3.0",
+    "torch>=2.4",
+    "httpx>=0.27",
+    "typer>=0.12",
+    "rich>=13.7",
+    "python-dotenv>=1.0",
+    "matplotlib>=3.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+rpib = "rpib.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rpib"]
+
+# Torch en version CPU uniquement : évite de télécharger ~2,5 Go de dépendances CUDA
+# inutiles sur une machine sans GPU.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# B008 : Typer EXIGE que `typer.Option(...)` soit évalué dans les valeurs par
+# défaut — c'est son mécanisme de déclaration. La règle ne s'applique pas ici.
+ignore = ["B008"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
