@@ -1,0 +1,32 @@
+services:
+  ollama:
+    image: ollama/ollama:0.12.3
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # Récupère le corpus, télécharge le modèle, indexe, puis lance la démonstration.
+  # Le banc complet (une heure sur CPU) se lance à part :
+  #   docker compose run --rm app bench
+  app:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:3b-instruct}
+    volumes:
+      - ./corpus:/app/corpus
+      - ./results:/app/results
+      - chroma:/app/chroma_db
+    entrypoint: ["/app/scripts/demo.sh"]
+
+volumes:
+  ollama_models:
+  chroma:
