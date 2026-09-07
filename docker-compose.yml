@@ -21,12 +21,21 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-qwen2.5:3b-instruct}
+    # Sous l'uid de l'hote : sans cela, les fichiers ecrits dans ./results
+    # appartiendraient a un utilisateur inexistant cote hote, et le conteneur ne
+    # pourrait pas ecrire dans un repertoire monte qui ne lui appartient pas.
+    # L'image reste non privilegiee par defaut ; c'est une adaptation au montage,
+    # pas un abandon du principe.
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - ./corpus:/app/corpus
+      # Le corpus est regenere par script dans le conteneur : volume nomme, pas
+      # de dependance aux permissions de l'hote.
+      - corpus:/app/corpus
       - ./results:/app/results
       - chroma:/app/chroma_db
     entrypoint: ["/app/scripts/demo.sh"]
 
 volumes:
   ollama_models:
+  corpus:
   chroma:

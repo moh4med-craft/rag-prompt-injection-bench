@@ -43,8 +43,15 @@ COPY src ./src
 COPY data ./data
 COPY scripts ./scripts
 COPY pyproject.toml README.md ./
+# Les repertoires de donnees sont ouverts en ecriture a tout uid, et le cache du
+# modele lisible par tous. Raison : docker-compose fait tourner le conteneur sous
+# l'uid de l'hote pour que les fichiers ecrits dans le montage lie lui
+# appartiennent. L'image, elle, reste non privilegiee par defaut (USER rpib), ce
+# que verifie l'integration continue.
 RUN mkdir -p corpus/clean corpus/poisoned results/runs chroma_db \
-    && chown -R rpib:rpib /app /home/rpib
+    && chown -R rpib:rpib /app /home/rpib \
+    && chmod -R 777 /app/corpus /app/results /app/chroma_db \
+    && chmod -R a+rX /home/rpib/.cache
 
 USER rpib
 ENTRYPOINT ["rpib"]

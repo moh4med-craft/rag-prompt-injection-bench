@@ -31,5 +31,5 @@ echo "--- avec séparation instruction/donnée ---"
 rpib ask "$QUESTION" --collection poisoned --defenses separation
 
 echo
-echo "Banc complet (environ une heure sur CPU) :"
+echo "Banc complet — environ 4 h sur CPU pour les 7 configurations :"
 echo "    docker compose run --rm app bench"
