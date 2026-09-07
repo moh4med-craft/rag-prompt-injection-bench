@@ -4,21 +4,21 @@ Mesure de bout en bout la vulnérabilité d'une application RAG à l'injection d
 
 ## Le problème
 
-Un RAG colle dans le prompt d'un modèle de langage du texte qu'il ne contrôle pas. Le modèle reçoit une séquence de tokens homogène où **rien ne distingue structurellement une instruction d'une donnée** : il n'existe pas, pour un LLM, d'équivalent des requêtes préparées de SQL. N'importe qui pouvant faire indexer un document peut donc y déposer une consigne qui sera exécutée avec les privilèges d'un utilisateur légitime, lequel n'a rien demandé — c'est l'injection *indirecte*, et le filtrage de l'entrée utilisateur ne la voit même pas passer.
+Un RAG colle dans le prompt d'un modèle de langage du texte qu'il ne contrôle pas. Le modèle reçoit une séquence de tokens homogène où **rien ne distingue structurellement une instruction d'une donnée** : il n'existe pas, pour un LLM, d'équivalent des requêtes préparées de SQL. N'importe qui pouvant faire indexer un document peut donc y déposer une consigne qui sera exécutée avec les privilèges d'un utilisateur légitime, lequel n'a rien demandé — c'est l'injection _indirecte_, et le filtrage de l'entrée utilisateur ne la voit même pas passer.
 
-La difficulté n'est pas d'écrire une défense, c'est de savoir ce qu'elle vaut. Un système qui refuse de répondre à tout affiche 0 % d'injection réussie ; sans mesure d'utilité en face, le chiffre de sécurité ne veut rien dire. Ce dépôt mesure les deux, couche par couche.
+La difficulté n'est pas d'écrire une défense, c'est plutôt de savoir ce qu'elle vaut. Un système qui refuse de répondre à tout affiche 0 % d'injection réussie ; sans mesure d'utilité en face, le chiffre de sécurité ne veut rien dire. Ce dépôt mesure les deux, couche par couche.
 
 ## L'approche
 
 ### Chaîne technique
 
-| Composant | Choix | Pourquoi |
-|---|---|---|
-| Découpage | maison, conscient de la structure markdown | Blocs de code jamais coupés, fil d'Ariane des titres conservé dans le texte indexé, budget compté avec **le tokenizer réel du modèle d'embedding** — au-delà de 512 tokens il tronque sans lever d'erreur, et la fin du passage n'est jamais indexée. |
-| Embeddings | `intfloat/multilingual-e5-small` (384 dim) | Corpus en français : un modèle anglophone s'effondre. Les préfixes `query:` / `passage:` sont obligatoires — les omettre coûte plus de dix points de Recall, en silence. |
-| Base vectorielle | ChromaDB, persistante | Filtrage par métadonnées natif, indispensable pour étiqueter les passages empoisonnés et mesurer combien sont réellement récupérés. FAISS ne stocke ni texte ni métadonnées. |
-| Modèle | Ollama, `qwen2.5:3b-instruct`, température 0 | Local, sans GPU ni clé d'API : n'importe qui peut reproduire les mesures. Température nulle, sinon l'écart avant/après n'est pas interprétable. |
-| Orchestration | aucune — ~1 200 lignes de Python explicite | Pas de LangChain ni LlamaIndex : chaque décision du pipeline est visible et modifiable, ce qui est le sujet même du projet. |
+| Composant        | Choix                                        | Pourquoi                                                                                                                                                                                                                                              |
+| ---------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Découpage        | maison, conscient de la structure markdown   | Blocs de code jamais coupés, fil d'Ariane des titres conservé dans le texte indexé, budget compté avec **le tokenizer réel du modèle d'embedding** — au-delà de 512 tokens il tronque sans lever d'erreur, et la fin du passage n'est jamais indexée. |
+| Embeddings       | `intfloat/multilingual-e5-small` (384 dim)   | Corpus en français : un modèle anglophone s'effondre. Les préfixes `query:` / `passage:` sont obligatoires — les omettre coûte plus de dix points de Recall, en silence.                                                                              |
+| Base vectorielle | ChromaDB, persistante                        | Filtrage par métadonnées natif, indispensable pour étiqueter les passages empoisonnés et mesurer combien sont réellement récupérés. FAISS ne stocke ni texte ni métadonnées.                                                                          |
+| Modèle           | Ollama, `qwen2.5:3b-instruct`, température 0 | Local, sans GPU ni clé d'API : n'importe qui peut reproduire les mesures. Température nulle, sinon l'écart avant/après n'est pas interprétable.                                                                                                       |
+| Orchestration    | aucune — ~1 200 lignes de Python explicite   | Pas de LangChain ni LlamaIndex : chaque décision du pipeline est visible et modifiable, ce qui est le sujet même du projet.                                                                                                                           |
 
 ### Architecture
 
@@ -82,9 +82,9 @@ Trois décisions font la valeur — ou la nullité — d'un chiffre de sécurit�
   <img alt="Injections réussies et exactitude, par modèle, avec et sans défenses" src="results/figures/modeles_light.png">
 </picture>
 
-| Modèle | Sans défense | Toutes défenses | Exactitude |
-|---|---|---|---|
-| `qwen2.5:3b` | ASR **25 %** · indirectes 0 % | ASR **10 %** · indirectes 0 % | 80 % → 87 % |
+| Modèle       | Sans défense                       | Toutes défenses                   | Exactitude       |
+| ------------ | ---------------------------------- | --------------------------------- | ---------------- |
+| `qwen2.5:3b` | ASR **25 %** · indirectes 0 %      | ASR **10 %** · indirectes 0 %     | 80 % → 87 %      |
 | `qwen2.5:7b` | ASR **35 %** · indirectes **17 %** | ASR **20 %** · indirectes **0 %** | 100 % → **87 %** |
 
 ### Ce qui marche
@@ -119,6 +119,8 @@ Trois décisions font la valeur — ou la nullité — d'un chiffre de sécurit�
 
 Température nulle, seed fixé, modèles épinglés par tag, corpus épinglé à un commit. `results/report.md` est généré, `results/runs/*.jsonl` conserve pour chaque appel la question, les passages récupérés, le prompt final et la réponse brute.
 
+**Vérifié à froid** : un `docker compose up` sur un environnement reconstruit de zéro reproduit les mêmes chiffres au dernier décimal — convergence de l'empoisonnement en 6 → 9 → 11 charges livrées sur 12, Recall@5 de 80,0 % au niveau du passage et 93,3 % au niveau du document, MRR 0,647.
+
 Le corpus empoisonné est construit **par convergence** : insérer une charge déplace les frontières de découpage, donc le passage récupéré après insertion n'est pas celui qui l'était avant. Trois heuristiques statiques ont livré 7 à 9 charges sur 12, jamais les mêmes. La boucle — insérer, réindexer, vérifier ce qui est réellement lu, recommencer — converge à 11/12 en trois tours. `rpib verify-poison` affiche le rang du passage porteur de chaque charge et doit précéder toute mesure.
 
 <picture>
@@ -142,4 +144,4 @@ Sans Docker : `make setup && make corpus && make ingest && make bench && make re
 
 ---
 
-**Portée et éthique.** Banc défensif. Les charges sont inertes : les canaris sont des chaînes sans effet, les URL d'exfiltration pointent vers le TLD réservé `attacker.test`, aucun outil n'est branché et aucune commande n'est exécutée. Le corpus est de la documentation publique, modifiée localement pour les besoins de la mesure. Ce dépôt démontre des *canaux* d'attaque afin de les mesurer et de les réduire, pas des dégâts.
+**Portée et éthique.** Banc défensif. Les charges sont inertes : les canaris sont des chaînes sans effet, les URL d'exfiltration pointent vers le TLD réservé `attacker.test`, aucun outil n'est branché et aucune commande n'est exécutée. Le corpus est de la documentation publique, modifiée localement pour les besoins de la mesure. Ce dépôt démontre des _canaux_ d'attaque afin de les mesurer et de les réduire, pas des dégâts.
