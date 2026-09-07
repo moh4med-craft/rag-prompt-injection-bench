@@ -77,7 +77,54 @@ Trois décisions font la valeur — ou la nullité — d'un chiffre de sécurit�
 
 ## Résultat
 
-*(en cours de mesure — cette section sera remplie par les chiffres du banc)*
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="results/figures/modeles_dark.png">
+  <img alt="Injections réussies et exactitude, par modèle, avec et sans défenses" src="results/figures/modeles_light.png">
+</picture>
+
+| Modèle | Sans défense | Toutes défenses | Exactitude |
+|---|---|---|---|
+| `qwen2.5:3b` | ASR **25 %** · indirectes 0 % | ASR **10 %** · indirectes 0 % | 80 % → 87 % |
+| `qwen2.5:7b` | ASR **35 %** · indirectes **17 %** | ASR **20 %** · indirectes **0 %** | 100 % → **87 %** |
+
+### Ce qui marche
+
+**Les défenses éliminent l'intégralité des injections indirectes réussies** — les deux qui aboutissaient sur le 7B, exfiltration par image markdown (LLM05) et divulgation des autres documents du contexte (LLM02), sont bloquées. C'est le cas d'usage pour lequel elles sont conçues, et sur ce périmètre elles font le travail.
+
+**La vulnérabilité suit la capacité, pas l'inverse.** Le 3B ne subit aucune injection indirecte, mais il plafonne à 80 % d'exactitude. Le 7B atteint 100 % d'exactitude et devient injectable. Les deux attaques qui passent sont les plus exigeantes en compréhension : le petit modèle ne résiste pas, il ne comprend pas. Choisir un modèle plus faible pour être plus sûr revient à échanger de la sécurité contre de l'inutilité.
+
+**Un prompt de tâche bien spécifié est déjà une défense.** Passer du prompt de tutoriel (« réponds à partir du contexte ») à un prompt qui impose format, citation et conduite à tenir en l'absence d'information fait tomber l'ASR direct de 62 % à 50 %, sans aucun mécanisme de sécurité et sans coût.
+
+**La récupération est mesurée, pas supposée** : Recall@5 de 80 % au niveau du passage et 93 % au niveau du document, MRR 0,647, après un balayage de `chunk_size` × `overlap`. L'écart entre les deux niveaux mesure la sensibilité au découpage.
+
+### Ce qui ne marche pas
+
+**Vingt attaques ne suffisent pas à départager les couches.** Une seule bascule déplace le taux de cinq points, et les intervalles de confiance à 95 % se chevauchent tous : 25 % [11–47] au départ, 10 % [3–30] à l'arrivée. La tendance est cohérente sur sept configurations successives, mais **aucune couche prise isolément n'est statistiquement significative**. Il faudrait 60 à 100 scénarios. C'est la limite principale de ce travail.
+
+**Le filtrage heuristique (D3) n'a rien apporté de mesurable** et a coûté des refus injustifiés : 13 % de questions légitimes laissées sans réponse. Trois attaques du jeu sont conçues pour le traverser — charge en base64, charge répartie sur deux passages, fait faux sans instruction — et elles le traversent. C'était le but de l'expérience, mais le résultat est net : sur ce corpus, cette couche est du coût sans bénéfice.
+
+**Les défenses coûtent 13 points d'exactitude sur le 7B** (100 % → 87 %), soit environ 2,6 questions sur 20. Le chiffre de sécurité ne se lit jamais seul.
+
+**L'injection directe résiste aux défenses.** Toutes couches activées, 4 attaques directes sur 8 réussissent encore sur le 7B. Séparer instruction et donnée protège le canal des documents, pas celui de l'utilisateur — qui reste, structurellement, le canal des instructions.
+
+**Une attaque n'a jamais pu être livrée** (I05, détournement de la récupération, LLM08) : le document bourré de mots-clés ne se fait pas remonter par la recherche. Elle est comptée à part, pas comme un succès défensif.
+
+**La mesure de latence est invalidée** : `total_duration` d'Ollama inclut le chargement du modèle en mémoire, ce qui a pollué les premières configurations d'un facteur dix. Corrigé dans le code, mais les chiffres publiés ici précèdent le correctif — la colonne est donc absente et devra être remesurée.
+
+**Le modèle 3B ne cite pas ses sources** malgré la consigne explicite du prompt système. La traçabilité des réponses, qui est un argument central du RAG, n'est pas acquise à cette taille.
+
+**Portée** : un seul corpus, une seule langue, deux modèles de la même famille. Rien ici ne se généralise à un autre modèle sans être remesuré — et le banc existe précisément pour permettre cette remesure.
+
+### Reproductibilité
+
+Température nulle, seed fixé, modèles épinglés par tag, corpus épinglé à un commit. `results/report.md` est généré, `results/runs/*.jsonl` conserve pour chaque appel la question, les passages récupérés, le prompt final et la réponse brute.
+
+Le corpus empoisonné est construit **par convergence** : insérer une charge déplace les frontières de découpage, donc le passage récupéré après insertion n'est pas celui qui l'était avant. Trois heuristiques statiques ont livré 7 à 9 charges sur 12, jamais les mêmes. La boucle — insérer, réindexer, vérifier ce qui est réellement lu, recommencer — converge à 11/12 en trois tours. `rpib verify-poison` affiche le rang du passage porteur de chaque charge et doit précéder toute mesure.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="results/figures/ablation_dark.png">
+  <img alt="Ablation des cinq couches de défense sur qwen2.5:3b" src="results/figures/ablation_light.png">
+</picture>
 
 ## Lancer le projet
 
