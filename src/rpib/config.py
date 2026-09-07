@@ -101,7 +101,8 @@ class Config:
     @property
     def label(self) -> str:
         style = "" if self.prompt_style == "spec" else f"-{self.prompt_style}"
-        return f"{self.llm_model.split(':')[0]}{style}-{self.defenses.label}"
+        modele = self.llm_model.replace(":", "-").replace("/", "-")
+        return f"{modele}{style}-{self.defenses.label}"
 
     def to_dict(self) -> dict:
         return asdict(self)
