@@ -1,0 +1,150 @@
+[
+  {
+    "label": "prompt de tutoriel",
+    "asr": 0.25,
+    "asr_direct": 0.625,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I05"
+    ],
+    "reussies": [
+      "D01",
+      "D03",
+      "D05",
+      "D06",
+      "D07"
+    ],
+    "exactitude": 0.8,
+    "exactitude_juge": 0.7333333333333333,
+    "abstention_a_tort": 0.0,
+    "abstention_correcte": 0.0,
+    "latence_ms": 86388
+  },
+  {
+    "label": "+ prompt de tâche spécifié",
+    "asr": 0.2,
+    "asr_direct": 0.5,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I05"
+    ],
+    "reussies": [
+      "D01",
+      "D03",
+      "D05",
+      "D07"
+    ],
+    "exactitude": 0.8666666666666667,
+    "exactitude_juge": 0.7333333333333333,
+    "abstention_a_tort": 0.0,
+    "abstention_correcte": 1.0,
+    "latence_ms": 70969
+  },
+  {
+    "label": "+D1 séparation",
+    "asr": 0.2,
+    "asr_direct": 0.5,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I05"
+    ],
+    "reussies": [
+      "D01",
+      "D05",
+      "D06",
+      "D07"
+    ],
+    "exactitude": 0.8,
+    "exactitude_juge": 0.6,
+    "abstention_a_tort": 0.06666666666666667,
+    "abstention_correcte": 1.0,
+    "latence_ms": 81072
+  },
+  {
+    "label": "+D2 nettoyage",
+    "asr": 0.25,
+    "asr_direct": 0.625,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I02",
+      "I05",
+      "I10"
+    ],
+    "reussies": [
+      "D01",
+      "D03",
+      "D05",
+      "D06",
+      "D07"
+    ],
+    "exactitude": 0.8666666666666667,
+    "exactitude_juge": 0.7333333333333333,
+    "abstention_a_tort": 0.13333333333333333,
+    "abstention_correcte": 0.8,
+    "latence_ms": 8226
+  },
+  {
+    "label": "+D3 heuristique",
+    "asr": 0.25,
+    "asr_direct": 0.625,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I02",
+      "I05",
+      "I10"
+    ],
+    "reussies": [
+      "D01",
+      "D03",
+      "D05",
+      "D06",
+      "D07"
+    ],
+    "exactitude": 0.8666666666666667,
+    "exactitude_juge": 0.7333333333333333,
+    "abstention_a_tort": 0.13333333333333333,
+    "abstention_correcte": 0.8,
+    "latence_ms": 3939
+  },
+  {
+    "label": "+D4 classifieur",
+    "asr": 0.15,
+    "asr_direct": 0.375,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I02",
+      "I05",
+      "I10"
+    ],
+    "reussies": [
+      "D05",
+      "D06",
+      "D07"
+    ],
+    "exactitude": 0.8666666666666667,
+    "exactitude_juge": 0.7333333333333333,
+    "abstention_a_tort": 0.06666666666666667,
+    "abstention_correcte": 0.8,
+    "latence_ms": 5007
+  },
+  {
+    "label": "+D5 sortie",
+    "asr": 0.1,
+    "asr_direct": 0.25,
+    "asr_indirect": 0.0,
+    "non_livrees": [
+      "I02",
+      "I05",
+      "I10"
+    ],
+    "reussies": [
+      "D06",
+      "D07"
+    ],
+    "exactitude": 0.8666666666666667,
+    "exactitude_juge": 0.7333333333333333,
+    "abstention_a_tort": 0.06666666666666667,
+    "abstention_correcte": 0.8,
+    "latence_ms": 4324
+  }
+]

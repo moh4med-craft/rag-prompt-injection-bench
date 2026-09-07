@@ -23,3 +23,7 @@ results/runs/
 
 # Plan de travail personnel
 PLAN.md
+
+# Résultat de la dernière exécution (transitoire) ; les mesures citées
+# sont archivées sous un nom explicite : results/bench_<modele>.json
+results/bench.json
