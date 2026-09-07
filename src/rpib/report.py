@@ -33,11 +33,13 @@ def _panel(ax, labels, valeurs, couleur, titre, sous_titre, t) -> None:
         # rogné par la limite d'axe à 0, ce qui l'ancre à la ligne de base.
         ax.plot([0, v * 100], [i, i], lw=13, solid_capstyle="round",
                 color=couleur, zorder=3)
-        ax.text(v * 100 + 2.5, i, f"{v:.0%}", va="center", ha="left",
+        # L'écart doit dépasser le rayon de l'extrémité arrondie, sinon
+        # l'étiquette semble collée à la barre.
+        ax.text(v * 100 + 4.5, i, f"{v:.0%}", va="center", ha="left",
                 fontsize=9.5, color=t["muted"], zorder=4)
 
     ax.set_yticks(list(y), labels, fontsize=9.5, color=t["text"])
-    ax.set_xlim(0, 118)
+    ax.set_xlim(0, 128)
     ax.set_ylim(-0.7, len(labels) - 0.3)
     ax.invert_yaxis()
     ax.set_xticks([0, 50, 100], ["0", "50", "100 %"], fontsize=8.5, color=t["muted"])
@@ -51,7 +53,8 @@ def _panel(ax, labels, valeurs, couleur, titre, sous_titre, t) -> None:
             color=t["muted"], ha="left", va="bottom")
 
 
-def make_figure(rows: list[dict], mode: str = "light") -> Path:
+def make_figure(rows: list[dict], nom: str, panneaux: list[tuple],
+                mode: str = "light") -> Path:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -59,19 +62,22 @@ def make_figure(rows: list[dict], mode: str = "light") -> Path:
 
     t = THEMES[mode]
     labels = [r["label"] for r in rows]
-    fig, (g, d) = plt.subplots(1, 2, figsize=(11, 0.62 * len(rows) + 2.1), sharey=True)
+    n = len(panneaux)
+    fig, axes = plt.subplots(1, n, figsize=(4.4 + 3.3 * n, 0.62 * len(rows) + 2.1),
+                             sharey=True)
+    axes = axes if n > 1 else [axes]
     fig.patch.set_facecolor(t["surface"])
-    for ax in (g, d):
+    for ax in axes:
         ax.set_facecolor(t["surface"])
 
-    _panel(g, labels, [r["asr"] for r in rows], t["asr"],
-           "Injections réussies (ASR)", "sur 20 scénarios · plus bas = mieux", t)
-    _panel(d, labels, [r["exactitude"] for r in rows], t["util"],
-           "Exactitude", "sur 20 questions annotées · plus haut = mieux", t)
-    d.tick_params(labelleft=False)
+    for ax, (cle, titre, sous_titre, role) in zip(axes, panneaux):
+        _panel(ax, labels, [r[cle] for r in rows], t[role], titre, sous_titre, t)
+    for ax in axes[1:]:
+        ax.tick_params(labelleft=False)
 
-    fig.subplots_adjust(left=0.17, right=0.98, top=0.84, bottom=0.16, wspace=0.08)
-    out = ROOT / "results" / "figures" / f"ablation_{mode}.png"
+    fig.subplots_adjust(left=0.24 if n > 2 else 0.17, right=0.98, top=0.84,
+                        bottom=0.16, wspace=0.08)
+    out = ROOT / "results" / "figures" / f"{nom}_{mode}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=170, facecolor=t["surface"])
     plt.close(fig)
@@ -79,55 +85,107 @@ def make_figure(rows: list[dict], mode: str = "light") -> Path:
 
 
 def make_markdown(rows: list[dict]) -> Path:
-    base, final = rows[0], rows[-1]
+    def ligne(r: dict) -> str:
+        ic = r.get("asr_ic95", [0.0, 0.0])
+        return (
+            f"| `{r.get('model', '?').replace('qwen2.5:', '')}` | {r['label']} | "
+            f"**{r['asr']:.0%}** | {ic[0]:.0%}–{ic[1]:.0%} | {r['asr_direct']:.0%} | "
+            f"{r['asr_indirect']:.0%} | **{r['exactitude']:.0%}** | "
+            f"{r['abstention_a_tort']:.0%} |"
+        )
+
     lignes = [
         "# Résultats",
         "",
-        (f"Modèle : `{base.get('model', 'qwen2.5:3b-instruct')}` · "
-         "20 questions annotées · 20 scénarios d'injection · température 0."),
+        ("Deux modèles · 20 questions annotées dont 5 sans réponse · 20 scénarios "
+         "d'injection dont 11 charges indirectes effectivement livrées · température 0."),
         "",
         "## Ablation des défenses",
         "",
-        ("| Configuration | ASR | ASR directes | ASR indirectes | Exactitude | "
-         "Abstention à tort | Latence |"),
-        "|---|---|---|---|---|---|---|",
+        ("| Modèle | Configuration | ASR | IC 95 % | directes | indirectes | "
+         "Exactitude | Abstention à tort |"),
+        "|---|---|---|---|---|---|---|---|",
     ]
-    for r in rows:
+    lignes += [ligne(r) for r in rows]
+
+    def extremes(taille: str) -> tuple[dict, dict] | None:
+        sel = [r for r in rows if taille in r.get("model", "")]
+        debut_ = next((r for r in sel if r["label"] == "prompt de tutoriel"), None)
+        fin_ = next((r for r in sel if r["label"] == "+D5 sortie"), None)
+        return (debut_, fin_) if debut_ and fin_ else None
+
+    lignes += ["", "## Bilan par modèle", ""]
+    for taille, nom in (("3b", "qwen2.5:3b"), ("7b", "qwen2.5:7b")):
+        paire = extremes(taille)
+        if not paire:
+            continue
+        a, b = paire
         lignes.append(
-            f"| {r['label']} | **{r['asr']:.0%}** | "
-            f"{r['asr_ic95'][0]:.0%}–{r['asr_ic95'][1]:.0%} | "
-            f"{r['asr_direct']:.0%} | {r['asr_indirect']:.0%} | "
-            f"**{r['exactitude']:.0%}** | {r['abstention_a_tort']:.0%} | "
-            f"{r['latence_ms']} ms |"
+            f"- **{nom}** — ASR {a['asr']:.0%} → {b['asr']:.0%} "
+            f"(indirectes {a['asr_indirect']:.0%} → {b['asr_indirect']:.0%}), "
+            f"exactitude {a['exactitude']:.0%} → {b['exactitude']:.0%}."
         )
-    delta_asr = base["asr"] - final["asr"]
-    delta_util = base["exactitude"] - final["exactitude"]
+
     lignes += [
         "",
-        (f"**Bilan** : ASR {base['asr']:.0%} → {final['asr']:.0%} "
-         f"({delta_asr:+.0%}), exactitude {base['exactitude']:.0%} → "
-         f"{final['exactitude']:.0%} ({-delta_util:+.0%})."),
-        "",
-        "## Attaques encore réussies avec toutes les défenses",
+        "## Attaques encore réussies, toutes défenses activées",
         "",
     ]
-    lignes += ([f"- `{a}`" for a in final["reussies"]] or ["- aucune"])
-    if final["non_livrees"]:
+    for taille, nom in (("3b", "qwen2.5:3b"), ("7b", "qwen2.5:7b")):
+        paire = extremes(taille)
+        if paire:
+            lignes.append(f"- **{nom}** : {', '.join('`' + a + '`' for a in paire[1]['reussies']) or 'aucune'}")
+
+    non_livrees = rows[0].get("non_livrees", [])
+    if non_livrees:
         lignes += [
             "",
             "## Attaques non livrées",
             "",
-            ("Charges dont le passage malveillant n'a jamais été récupéré. Elles "
-             "n'ont pas été *bloquées* : elles n'ont pas eu lieu. Les compter comme "
-             "des succès défensifs surestimerait les défenses."),
+            ("Charges dont le passage porteur n'a jamais été récupéré. Elles n'ont "
+             "pas été *bloquées* : elles n'ont pas eu lieu. Les compter comme des "
+             "succès défensifs surestimerait les défenses."),
             "",
-        ] + [f"- `{a}`" for a in final["non_livrees"]]
+        ] + [f"- `{a}`" for a in non_livrees]
 
     out = ROOT / "results" / "report.md"
     out.write_text("\n".join(lignes) + "\n", encoding="utf-8")
     return out
 
 
+# La couleur suit la GRANDEUR mesurée, pas le panneau : les deux taux d'injection
+# partagent la même teinte parce qu'ils mesurent la même chose sur deux
+# sous-ensembles. Couple validé en clair et en sombre (séparation CVD et contraste).
+PANNEAUX_ABLATION = [
+    ("asr", "Injections réussies", "sur 20 scénarios · plus bas = mieux", "asr"),
+    ("exactitude", "Exactitude", "sur 20 questions annotées · plus haut = mieux", "util"),
+]
+PANNEAUX_MODELES = [
+    ("asr", "Injections réussies", "les 20 scénarios · plus bas = mieux", "asr"),
+    ("asr_indirect", "dont indirectes", "12 charges dans le corpus", "asr"),
+    ("exactitude", "Exactitude", "20 questions · plus haut = mieux", "util"),
+]
+
+
 def build_all() -> tuple[Path, list[Path]]:
     rows = json.loads((ROOT / "results" / "bench.json").read_text(encoding="utf-8"))
-    return make_markdown(rows), [make_figure(rows, m) for m in ("light", "dark")]
+    ablation = [r for r in rows if "3b" in r.get("model", "")]
+
+    # Comparaison de modèles : mêmes deux extrêmes, deux modèles. Un graphique
+    # qui mélangerait les modèles sans les distinguer serait trompeur.
+    def extremes(taille: str) -> list[dict]:
+        sel = [r for r in rows if taille in r.get("model", "")]
+        garde = [r for r in sel if r["label"] in ("prompt de tutoriel", "+D5 sortie")]
+        for r in garde:
+            r = dict(r)
+        return [{**r, "label": f"{taille.upper()} — " +
+                 ("sans défense" if "tutoriel" in r["label"] else "toutes défenses")}
+                for r in garde]
+
+    modeles = extremes("3b") + extremes("7b")
+
+    figures = []
+    for mode in ("light", "dark"):
+        figures.append(make_figure(ablation, "ablation", PANNEAUX_ABLATION, mode))
+        figures.append(make_figure(modeles, "modeles", PANNEAUX_MODELES, mode))
+    return make_markdown(rows), figures
