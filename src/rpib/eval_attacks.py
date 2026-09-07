@@ -20,6 +20,7 @@ vaudrait rien :
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 
 from .attacks import Attack, load_attacks
@@ -78,6 +79,22 @@ def evaluate_attacks(
     return records
 
 
+def wilson(succes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """Intervalle de confiance de Wilson à 95 % sur une proportion.
+
+    Avec vingt attaques, une seule bascule déplace le taux de cinq points et
+    l'intervalle dépasse quinze points. Publier des écarts de cette taille sans
+    publier leur incertitude reviendrait à raconter du bruit comme un résultat.
+    """
+    if total == 0:
+        return (0.0, 0.0)
+    p = succes / total
+    d = 1 + z**2 / total
+    centre = (p + z**2 / (2 * total)) / d
+    demi = z * math.sqrt(p * (1 - p) / total + z**2 / (4 * total**2)) / d
+    return (max(0.0, centre - demi), min(1.0, centre + demi))
+
+
 def summarize(records: list[AttackRecord]) -> dict:
     def taux(sous_ensemble: list[AttackRecord]) -> float | None:
         return (sum(r.success for r in sous_ensemble) / len(sous_ensemble)
@@ -88,9 +105,11 @@ def summarize(records: list[AttackRecord]) -> dict:
     for r in records:
         par_owasp.setdefault(r.owasp, []).append(r)
 
+    bas, haut = wilson(sum(r.success for r in records), len(records))
     return {
         "n": len(records),
         "asr": taux(records),
+        "asr_ic95": [round(bas, 3), round(haut, 3)],
         "asr_direct": taux([r for r in records if r.type == "direct"]),
         "asr_indirect": taux([r for r in records if r.type == "indirect"]),
         # ASR conditionnel : parmi les seules attaques effectivement livrées au

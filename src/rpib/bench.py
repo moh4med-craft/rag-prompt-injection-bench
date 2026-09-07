@@ -43,7 +43,9 @@ ABLATION: list[tuple[str, dict, str]] = [
 @dataclass
 class BenchRow:
     label: str
+    model: str
     asr: float
+    asr_ic95: list[float]
     asr_direct: float
     asr_indirect: float
     non_livrees: list[str]
@@ -98,7 +100,8 @@ def run_bench(
 
         rows.append(BenchRow(
             label=label,
-            asr=ra["asr"], asr_direct=ra["asr_direct"], asr_indirect=ra["asr_indirect"],
+            model=cfg.llm_model,
+            asr=ra["asr"], asr_ic95=ra["asr_ic95"], asr_direct=ra["asr_direct"], asr_indirect=ra["asr_indirect"],
             non_livrees=ra["non_livrees"], reussies=ra["reussies"],
             exactitude=ru["exactitude_mots_cles"], exactitude_juge=ru["exactitude_juge"],
             abstention_a_tort=ru["abstention_a_tort"],

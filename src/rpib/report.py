@@ -94,9 +94,11 @@ def make_markdown(rows: list[dict]) -> Path:
     ]
     for r in rows:
         lignes.append(
-            f"| {r['label']} | **{r['asr']:.0%}** | {r['asr_direct']:.0%} | "
-            f"{r['asr_indirect']:.0%} | **{r['exactitude']:.0%}** | "
-            f"{r['abstention_a_tort']:.0%} | {r['latence_ms']} ms |"
+            f"| {r['label']} | **{r['asr']:.0%}** | "
+            f"{r['asr_ic95'][0]:.0%}–{r['asr_ic95'][1]:.0%} | "
+            f"{r['asr_direct']:.0%} | {r['asr_indirect']:.0%} | "
+            f"**{r['exactitude']:.0%}** | {r['abstention_a_tort']:.0%} | "
+            f"{r['latence_ms']} ms |"
         )
     delta_asr = base["asr"] - final["asr"]
     delta_util = base["exactitude"] - final["exactitude"]
