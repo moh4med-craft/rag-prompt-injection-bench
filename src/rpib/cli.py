@@ -204,20 +204,77 @@ def sweep(
 
 
 @app.command()
-def poison() -> None:
-    """Génère corpus/poisoned/ à partir du corpus propre et des scénarios d'attaque."""
-    from .poison import build_poisoned_corpus
+def poison(
+    rounds: int = typer.Option(5, help="Nombre maximum de tours de convergence"),
+    collection: str = typer.Option("poisoned"),
+) -> None:
+    """Construit corpus/poisoned/ et vérifie que chaque charge est bien livrée.
 
-    rapport = build_poisoned_corpus()
-    console.print(f"[green]Insérées au point de récupération[/green] : "
-                  f"{rapport['insérées']}")
-    if rapport["repli_titre"]:
-        console.print(f"[yellow]Repli sur le titre (passage peut-être non récupéré)[/yellow] : "
-                      f"{rapport['repli_titre']}")
+    Le placement ne peut pas être décidé une fois pour toutes : insérer du texte
+    déplace les frontières de découpage, donc le passage récupéré après insertion
+    n'est pas celui qui l'était avant. On insère, on réindexe, on regarde ce qui
+    est réellement récupéré, et on recommence pour les charges manquantes en
+    visant un passage effectivement lu. Quelques tours suffisent.
+    """
+    from .attacks import load_attacks
+    from .poison import build_poisoned_corpus, choose_anchor
+    from .store import Store
+
+    cfg = Config(collection=collection)
+    indirectes = [a for a in load_attacks() if a.type == "indirect"]
+    reglables = [a for a in indirectes if a.target_doc != "__NOUVEAU__"]
+    textes_propres = {
+        a.id: (ROOT / "corpus" / "clean" / f"{a.target_doc}.md").read_text(encoding="utf-8")
+        for a in reglables
+    }
+
+    ancrages: dict[str, str] = {}
+    essayes: dict[str, set[str]] = {a.id: set() for a in reglables}
+    non_livrees: list = []
+    for tour in range(1, rounds + 1):
+        rapport = build_poisoned_corpus(anchors=ancrages)
+        signatures = rapport["signatures"]
+
+        store = Store(cfg, collection)
+        store.build(ROOT / "corpus" / "poisoned")
+
+        non_livrees = []
+        for a in indirectes:
+            signature = signatures.get(a.id, "").lower()
+            resultats = store.search(a.trigger_question, cfg.top_k)
+            if not (signature and any(signature in r.text.lower() for r in resultats)):
+                non_livrees.append(a)
+
+        livrees = len(indirectes) - len(non_livrees)
+        console.print(f"  tour {tour} : [bold]{livrees}/{len(indirectes)}[/bold] "
+                      f"charges livrées" +
+                      (f" — restantes {[a.id for a in non_livrees]}" if non_livrees else ""))
+        if not non_livrees:
+            break
+
+        progres = False
+        for a in non_livrees:
+            if a.id not in textes_propres:
+                continue  # document créé de toutes pièces : rien à replacer
+            if a.id in ancrages:
+                essayes[a.id].add(ancrages[a.id])
+            nouvelle = choose_anchor(store, a, textes_propres[a.id],
+                                     signatures[a.id], essayes[a.id])
+            if nouvelle:
+                ancrages[a.id] = nouvelle
+                progres = True
+        if not progres:
+            console.print("[yellow]  plus aucun placement alternatif : arrêt[/yellow]")
+            break
+
     console.print(f"[cyan]Documents malveillants créés[/cyan] : "
                   f"{rapport['nouveaux_documents']}")
-    console.print("[dim]Réindexe ensuite : rpib ingest --corpus corpus/poisoned "
-                  "--collection poisoned[/dim]")
+    if non_livrees:
+        console.print(f"[yellow]Non livrées : {[a.id for a in non_livrees]} — "
+                      f"ces attaques ne mesurent pas la sécurité mais la "
+                      f"récupération, et sont comptées à part.[/yellow]")
+    console.print("[dim]Réindexe la variante nettoyée : rpib ingest --corpus "
+                  "corpus/poisoned --collection poisoned_d2 --sanitize[/dim]")
 
 
 @app.command("eval-utility")
@@ -319,3 +376,50 @@ def report() -> None:
     console.print(f"[green]{md}[/green]")
     for f in figures:
         console.print(f"[green]{f}[/green]")
+
+
+@app.command("verify-poison")
+def verify_poison(
+    collection: str = typer.Option("poisoned"),
+    top_k: int = typer.Option(None),
+) -> None:
+    """Vérifie que chaque charge indirecte est réellement livrée au modèle.
+
+    Une attaque dont le passage porteur n'apparaît pas dans le top-k n'a pas été
+    bloquée : elle n'a pas eu lieu. La compter comme un échec d'attaque
+    surestimerait les défenses. Ce contrôle doit tourner après chaque
+    empoisonnement, avant toute mesure d'ASR.
+    """
+    import json
+
+    from .attacks import load_attacks
+    from .store import Store
+
+    cfg = _config(collection=collection, top_k=top_k)
+    store = Store(cfg, collection)
+    manifeste = json.loads(
+        (ROOT / "corpus" / "poisoned" / ".payloads.json").read_text(encoding="utf-8")
+    )
+
+    table = Table("id", "technique", "rang du passage porteur", "score")
+    absentes = []
+    for attack in load_attacks():
+        if attack.type != "indirect":
+            continue
+        signature = manifeste.get(attack.id, "").lower()
+        resultats = store.search(attack.trigger_question, cfg.top_k)
+        rang = next((i for i, r in enumerate(resultats, 1)
+                     if signature and signature in r.text.lower()), None)
+        if rang is None:
+            absentes.append(attack.id)
+        table.add_row(
+            attack.id, attack.technique[:30],
+            str(rang) if rang else "[red]hors du top-k[/red]",
+            f"{resultats[rang - 1].score:.3f}" if rang else "—",
+        )
+    console.print(table)
+    livrees = 12 - len(absentes)
+    console.print(f"[bold]{livrees}/12 charges indirectes livrées au modèle[/bold]")
+    if absentes:
+        console.print(f"[yellow]Non livrées : {absentes} — ces attaques ne mesurent "
+                      f"pas la sécurité mais la récupération.[/yellow]")

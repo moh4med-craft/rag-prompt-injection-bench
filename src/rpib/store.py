@@ -96,15 +96,22 @@ class Store:
             metadata={"hnsw:space": "cosine"},
         )
 
+        # Signatures des charges, écrites par poison.py. En leur absence (corpus
+        # propre), aucun passage n'est marqué.
+        manifeste = corpus_dir / ".payloads.json"
+        signatures: list[str] = []
+        if manifeste.exists():
+            import json
+
+            signatures = [s.lower() for s in json.loads(
+                manifeste.read_text(encoding="utf-8")).values()]
+
         chunks: list[Chunk] = []
-        poisoned_docs: set[str] = set()
         for path in sorted(corpus_dir.glob("*.md")):
             raw = path.read_text(encoding="utf-8", errors="replace")
             if sanitize:
                 raw = clean_document(raw)
             doc_id = path.stem
-            if "[POISON]" in raw or path.stem.startswith("poisoned__"):
-                poisoned_docs.add(doc_id)
             chunks.extend(
                 split_markdown(
                     raw,
@@ -126,7 +133,9 @@ class Store:
                     "doc_id": c.doc_id,
                     "heading": c.heading,
                     "position": c.position,
-                    "poisoned": c.doc_id in poisoned_docs,
+                    # Au niveau du PASSAGE : seul celui qui porte réellement la
+                    # charge compte comme livré au modèle.
+                    "poisoned": any(sig in c.text.lower() for sig in signatures),
                 }
                 for c in chunks
             ],
