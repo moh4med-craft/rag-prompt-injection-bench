@@ -1,39 +1,59 @@
-.PHONY: help setup corpus ingest poison eval attack bench report test lint clean
+.PHONY: help setup corpus ingest eval attack bench report all sweep test lint clean
 
-help:
+help:  ## Affiche cette aide
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-9s\033[0m %s\n", $$1, $$2}'
 
-setup:  ## Installe l'environnement (uv + Python 3.12)
+# --------------------------------------------------------------------------- #
+# Préparation
+# --------------------------------------------------------------------------- #
+
+setup:  ## Installe l'environnement Python 3.12 (~2 min)
 	uv sync --extra dev
 
-corpus:  ## Télécharge le corpus (documentation française de FastAPI)
+corpus:  ## Télécharge le corpus, doc française de FastAPI (~10 s)
 	./scripts/fetch_corpus.sh
 
-ingest:  ## Indexe le corpus propre, le corpus empoisonné et sa version nettoyée
+ingest:  ## Construit les 4 index vectoriels (~4 min, aucun appel au LLM)
 	uv run rpib ingest --collection clean
+	uv run rpib ingest --corpus corpus/clean --collection clean_d2 --sanitize
 	uv run rpib poison
 	uv run rpib ingest --corpus corpus/poisoned --collection poisoned
 	uv run rpib ingest --corpus corpus/poisoned --collection poisoned_d2 --sanitize
 
-eval:  ## Évalue la récupération puis la génération
+# --------------------------------------------------------------------------- #
+# Mesures
+# --------------------------------------------------------------------------- #
+
+eval:  ## Recherche puis génération (~10 min ; la recherche seule est instantanée)
 	uv run rpib eval-retrieval --detail
+	uv run rpib eval-utility --condition oracle
 	uv run rpib eval-utility --condition e2e
+	uv run rpib eval-utility --condition closed
 
-attack:  ## Mesure l'ASR sans défense
-	uv run rpib attack --collection poisoned
+sweep:  ## Balaie taille de passage x recouvrement (~10 min, aucun appel au LLM)
+	uv run rpib sweep
 
-bench:  ## Ablation complète : ASR et exactitude pour chaque configuration
+attack:  ## Mesure l'ASR sans défense (~20 min)
+	uv run rpib attack --collection poisoned --prompt-style naive
+
+bench:  ## Ablation complète : ASR ET exactitude par configuration (~5 h sur CPU)
 	uv run rpib bench
 
-report:  ## Produit results/report.md et les figures
+report:  ## Produit results/report.md et les figures (instantané)
 	uv run rpib report
 
-test:  ## Tests unitaires
+all: corpus ingest bench report  ## Chaîne complète, de zéro au rapport (~5 h)
+
+# --------------------------------------------------------------------------- #
+# Qualité
+# --------------------------------------------------------------------------- #
+
+test:  ## Tests unitaires (aucun modèle requis)
 	uv run pytest -q
 
 lint:  ## Vérification statique
 	uv run ruff check src/ tests/
 
-clean:  ## Supprime index et résultats bruts
+clean:  ## Supprime les index et les résultats bruts
 	rm -rf chroma_db results/runs
