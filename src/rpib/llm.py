@@ -38,7 +38,11 @@ class LLMClient:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.provider = config.llm_provider
-        self._client = httpx.Client(timeout=180.0)
+        # Sur CPU, un prompt de 2 000 tokens demande plusieurs minutes de
+        # traitement au modele 7B — bien au-dela des delais HTTP usuels. Un
+        # delai trop court ne mesure pas la resistance du modele, il interrompt
+        # la mesure.
+        self._client = httpx.Client(timeout=float(os.environ.get("LLM_TIMEOUT", "900")))
 
     def chat(self, system: str, user: str) -> Completion:
         if self.provider == "ollama":
@@ -68,9 +72,15 @@ class LLMClient:
         if r.status_code != 200:
             raise LLMError(f"ollama {r.status_code}: {r.text[:300]}")
         data = r.json()
+        # `total_duration` inclut le CHARGEMENT du modele en memoire. Quand deux
+        # modeles se disputent la place, Ollama en decharge un a chaque appel et
+        # la latence mesuree est multipliee par dix — sans que le systeme evalue
+        # ait change. On ne retient donc que le temps de calcul : traitement du
+        # prompt puis generation.
+        calcul = data.get("prompt_eval_duration", 0) + data.get("eval_duration", 0)
         return Completion(
             text=data["message"]["content"].strip(),
-            latency_ms=int(data.get("total_duration", 0) / 1e6),
+            latency_ms=int((calcul or data.get("total_duration", 0)) / 1e6),
             prompt_tokens=data.get("prompt_eval_count", 0),
             completion_tokens=data.get("eval_count", 0),
         )
